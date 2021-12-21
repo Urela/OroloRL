@@ -1,4 +1,4 @@
-# Glass House 
+# Green House 
 This is repository where I dump my implementation of various **reinforcement learing algortihms**. Each implementaiton is rewritten using **pytorch** and exists in one file <algorithm name>.py . These are ment to be toy examples, are primarily for learning and expirmentation.
 
 ## Usage
