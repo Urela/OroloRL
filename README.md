@@ -8,8 +8,10 @@ python <algorithm name>.py
 ```
  
 Implementation of the algorithms are benchmarked againts Openai gym the cart pole problem.
-![Alt Text](res/cartpole.gif)
-  
+<p align="center">
+	<img src="(res/cartpole.gif" width="350"/> 
+</p>
+	
 ### Algorithm
 DQN: Deep Q-learning
 <p align="center">
@@ -25,5 +27,5 @@ PPO: Proximal policy optimization
 - OpenAI GYM
 
 ## Reference 
-[Youtube-Code-Repository](https://github.com/philtabor/Youtube-Code-Repository)
-[minimalRL-pytorch] (https://github.com/seungeunrho/minimalRL)
+- [Youtube-Code-Repository](https://github.com/philtabor/Youtube-Code-Repository)
+- [minimalRL-pytorch] (https://github.com/seungeunrho/minimalRL)
