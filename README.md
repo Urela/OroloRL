@@ -36,7 +36,14 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
    </tr> 
    <tr>
       <td> DQN: Deep Q-learning </td>
-      <td> PPO: Proximal policy optimization </td>
+      <td> PPO: Proximal policy optimization 
+	   Trained for 100000 times steps, updated every 1200 time steps
+          - gamma = 0.99
+          - lambda = 0.95
+          - epoch = 4
+          - clip = 0.2
+	      
+      </td>
   </tr>
 </table>
 
