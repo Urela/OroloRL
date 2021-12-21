@@ -12,9 +12,22 @@ Implementation of the algorithms are benchmarked againts Openai gym the cart pol
 	<img src="res/cartpole.gif" width="200" /> 
 </p>
 	
-### Algorithm
+## Parameters
+Parameters are not 'optimized', I just picked some off-the-shelf-parameters
+- activation: ReLu
+- optimizer: Adam
+- batch size: DQN -64
+- learning rate : 0.003  
+- PPO was trained for 100000 times steps, updated every 1200 time steps
+- DQN was trained for 300 episodes, updated every 64 time steps
+- PPO 
+  -- gamma = 0.99
+  - lambda = 0.95
+  - epoch = 4
+  - clip = 0.2
+## Results
 
-<table>
+<table align="center">
   <tr>
     <td> <img src="res/DQN.png" width="300"/> </td>
     <td> <img src="res/PPO.png" width="300"/> </td>
