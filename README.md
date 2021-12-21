@@ -9,15 +9,15 @@ python <algorithm name>.py
  
 Implementation of the algorithms are benchmarked againts Openai gym the cart pole problem.
 <p align="center">
-	<img src="res/cartpole.gif" /> 
+	<img src="res/cartpole.gif" width="200" /> 
 </p>
 	
 ### Algorithm
 
 <table>
   <tr>
-    <td> <img src="res/DQN.png" width="350"/> /td>
-    <td> <img src="res/PPO.png" width="350"/> /td>
+    <td> <img src="res/DQN.png" width="300"/> </td>
+    <td> <img src="res/PPO.png" width="300"/> </td>
    </tr> 
    <tr>
       <td> DQN: Deep Q-learning </td>
