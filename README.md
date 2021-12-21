@@ -9,18 +9,22 @@ python <algorithm name>.py
  
 Implementation of the algorithms are benchmarked againts Openai gym the cart pole problem.
 <p align="center">
-	<img src="(res/cartpole.gif" width="350"/> 
+	<img src="res/cartpole.gif" /> 
 </p>
 	
 ### Algorithm
-DQN: Deep Q-learning
-<p align="center">
-	<img src="res/DQN.png" width="350"/> 
-</p>
-PPO: Proximal policy optimization
-<p align="center">
-	<img src="res/PPO.png" width="350"/> 
-</p>
+
+<table>
+  <tr>
+    <td> <img src="res/DQN.png" width="350"/> /td>
+    <td> <img src="res/PPO.png" width="350"/> /td>
+   </tr> 
+   <tr>
+      <td> DQN: Deep Q-learning </td>
+      <td> PPO: Proximal policy optimization </td>
+  </tr>
+</table>
+
 
 ## Dependencies
 - PyTorch
