@@ -1,28 +1,9 @@
 import gym
-import time
-import torch
+import torch 
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-
-'''
-Multi environment adapted from 
-   https://github.com/vwxyzjn/PPO-Implementation-Deep-Dive/blob/master/ppo.py#L132
-'''
-
-def make_env(gym_id, idx, seed, record=False, run_name=''):
-  def thunk():
-    env = gym.make(gym_id)
-    env = gym.wrappers.RecordEpisodeStatistics(env)
-    if record and idx==0:
-      env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-    # seeds for reproductivity
-    env.seed(seed)                   
-    env.action_space.seed(seed)      
-    env.observation_space.seed(seed) 
-    return env
-  return thunk
 
 class ActorCritic(nn.Module):
   def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
@@ -63,23 +44,23 @@ class ActorCritic(nn.Module):
     value = self.fc_critic(state)
     return value
 
-class PPO:  
-  def __init__(self, in_space, out_space, batch_size=5, Mem_size=5, num_envs=1):
+class PPO: 
+  def __init__(self, in_dims, out_dims, size, bsize):
     self.lr    = 0.0003
     self.gamma = 0.99 
     self.lamda = 0.95
     self.epoch = 4
     self.eps_clip = 0.2
 
-    self.AC = ActorCritic(in_space.shape, out_space.n, self.lr)
-
-    self.states  = np.zeros((Mem_size, num_envs)+in_space.shape,  dtype=np.float32)
-    self.actions = np.zeros((Mem_size, num_envs)+out_space.shape, dtype=np.int32)
-    self.rewards = np.zeros((Mem_size, num_envs), dtype=np.float32)
-    self.probs   = np.zeros((Mem_size, num_envs), dtype=np.float32)
-    self.values  = np.zeros((Mem_size, num_envs), dtype=np.float32)
-    self.dones   = np.zeros((Mem_size, num_envs), dtype=np.int32)
-    self.size, self.bsize, self.idx = Mem_size, batch_size, 0
+    self.AC = ActorCritic( in_dims, out_dims, self.lr)
+     
+    self.states  = np.zeros((size, in_dims), dtype=np.float32)
+    self.actions = np.zeros(size, dtype=np.int32)
+    self.rewards = np.zeros(size, dtype=np.float32)
+    self.probs   = np.zeros(size, dtype=np.float32)
+    self.values  = np.zeros(size, dtype=np.float32)
+    self.dones   = np.zeros(size, dtype=np.int32)
+    self.size, self.bsize, self.idx  = size, bsize, 0
 
   def store(self, state, action, reward, probs, vals, done):
     idx = self.idx % self.size
@@ -89,7 +70,7 @@ class PPO:
     self.rewards [idx] = reward
     self.probs   [idx] = probs
     self.values  [idx] = vals
-    self.dones   [idx] = 1-(done)
+    self.dones   [idx] = 1-int(done)
 
   def selectAction(self, obs):
     obs    = torch.from_numpy(obs)
@@ -97,13 +78,13 @@ class PPO:
     dist   = self.AC.actor(obs)
     action = dist.sample()
 
-    probs  = torch.squeeze(dist.log_prob(action)).detach().numpy()
-    action = torch.squeeze(action).detach().numpy()
-    value  = torch.squeeze(value).detach().numpy()
+    probs  = torch.squeeze(dist.log_prob(action)).item()
+    action = torch.squeeze(action).item()
+    value  = torch.squeeze(value).item()
     return action, probs, value
 
   def train(self):
-    for e in range( self.epoch):
+    for _ in range( self.epoch):
       # finding Advantages using gamma returns
       nvalues = np.concatenate([self.values[1:] ,[self.values[-1]]])
       delta = self.rewards + self.gamma*nvalues* self.dones - self.values
@@ -148,59 +129,67 @@ class PPO:
         loss.mean().backward()
         self.AC.optimizer.step()
 
-    self.idx=0 # clear memory
+    # clear memory
+    self.idx=0
     pass
 
-
 # Global variables
-gym_id = "CartPole-v1"
-seed        = 1
-num_envs    = 4       # number of parallel environments
+env=gym.make('CartPole-v1')
+input_size  = env.observation_space.shape[0]
+output_size = env.action_space.n
+#output_size = env.action_space.shape[0]
 
-max_ep_len  = 400   # max time steps per episodes
-total_steps = 50000 # number of time steps to observe  ( n / num of enivoronments )
-update_freq = 128   # update policy every n times teps ( n / num of enivoronments )
-batch_size  = num_envs * update_freq
 
-#update_freq = max_ep_len * 4    # update policy every n timesteps
-#num_updates = total_steps // batch_size # number of updates we need to do
+# Environment Hyperparameters
+max_ep_len = 400                    # max timesteps in one episode
+max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
+update_timestep = max_ep_len * 4    # update policy every n timesteps
+print_freq = max_ep_len * 4         # print avg reward in the interval (in num timesteps)
 
-envs = gym.vector.SyncVectorEnv([
-      make_env(gym_id, i, seed+i, record=False, run_name=f"{gym_id}__{int(time.time())}" ) 
-          for i in range(num_envs)
-      ])
+print_running_reward   = 0
+print_running_episodes = 0
 
-agent = PPO(envs.single_observation_space, envs.single_action_space, batch_size, 
-                                                    Mem_size=batch_size, num_envs=num_envs)
-
-timestep  = 0 
+time_step = 0
 i_episode = 0
-scores, avg_scores = [], []
 
-obs = envs.reset()
-while timestep <= total_steps:
+agent = PPO(input_size, output_size, size=update_timestep, bsize=1)
+
+scores, avg_scores = [], []
+while time_step <= max_training_timesteps:
+  state = env.reset()
   score = 0
   for t in range(1, max_ep_len+1):
 
-    action, log_probs, value = agent.selectAction(obs)
-    _obs, reward, done, info = envs.step(action)
-    agent.store(obs, action, reward, log_probs, value, done)
+    action, probs, val = agent.selectAction(state)
+    state, reward, done, _ = env.step(action)
+    agent.store(state, action, reward, probs, val, done)
 
-    obs = _obs
-
-    timestep += 1
+    time_step +=1
     score += reward
 
     # train PPO agent
-    if timestep % update_freq == 0: 
-      agent.train()
+    if time_step % update_timestep == 0: agent.train()
 
-      for item in info:
-        if "episode" in item.keys():
-          score = item['episode']['r']
-          scores.append( score  )
-          avg = np.round(np.mean(scores[-100:]), 2)
-          i_episode+=1
-          print(f"Episode: {i_episode}  Episodic return: {score} Avg returns:{avg} Time step: {timestep} ")
-          #print(f"Episode: {i_episode}  Episode stats: {item['episode']}  Time step: {timestep} ")
+    # printing average reward
+    if time_step % print_freq == 0:
+      # print average reward till last episode
+      print_avg_reward = print_running_reward / print_running_episodes
+      print_avg_reward = round(print_avg_reward, 2)
+
+      print("Episode : {}  Timestep : {}  Average Reward : {}".format(i_episode, time_step, print_avg_reward))
+
+      print_running_reward = 0
+      print_running_episodes = 0
+            
+    # break; if the episode is over
+    if done: break
+
+  scores.append(score)
+  avg_scores.append(  np.mean(scores[-100:]) )
+
+  print_running_reward += score
+  print_running_episodes += 1
+  i_episode += 1
+
+env.close()
 
