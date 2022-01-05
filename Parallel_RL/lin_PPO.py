@@ -45,22 +45,22 @@ class ActorCritic(nn.Module):
     return value
 
 class PPO: 
-  def __init__(self, in_dims, out_dims, size, bsize):
-    self.lr    = 0.0003
+  def __init__(self, in_space, out_space, batch_size=4, Mem_size=128):
+    self.lr    = 2.5e-4   # 0.0003
     self.gamma = 0.99 
     self.lamda = 0.95
     self.epoch = 4
     self.eps_clip = 0.2
 
-    self.AC = ActorCritic( in_dims, out_dims, self.lr)
+    self.AC = ActorCritic( in_space.shape, out_space.n, self.lr)
      
-    self.states  = np.zeros((size, in_dims), dtype=np.float32)
-    self.actions = np.zeros(size, dtype=np.int32)
-    self.rewards = np.zeros(size, dtype=np.float32)
-    self.probs   = np.zeros(size, dtype=np.float32)
-    self.values  = np.zeros(size, dtype=np.float32)
-    self.dones   = np.zeros(size, dtype=np.int32)
-    self.size, self.bsize, self.idx  = size, bsize, 0
+    self.states  = np.zeros((Mem_size, in_space.shape[0]), dtype=np.float32)
+    self.actions = np.zeros(Mem_size, dtype=np.int32)
+    self.rewards = np.zeros(Mem_size, dtype=np.float32)
+    self.probs   = np.zeros(Mem_size, dtype=np.float32)
+    self.values  = np.zeros(Mem_size, dtype=np.float32)
+    self.dones   = np.zeros(Mem_size, dtype=np.int32)
+    self.size, self.bsize, self.idx = Mem_size, batch_size, 0
 
   def store(self, state, action, reward, probs, vals, done):
     idx = self.idx % self.size
@@ -84,7 +84,7 @@ class PPO:
     return action, probs, value
 
   def train(self):
-    for _ in range( self.epoch):
+    for e in range( self.epoch):
       # finding Advantages using gamma returns
       nvalues = np.concatenate([self.values[1:] ,[self.values[-1]]])
       delta = self.rewards + self.gamma*nvalues* self.dones - self.values
@@ -101,6 +101,11 @@ class PPO:
       indices = np.arange( self.size, dtype=np.int64 )
       np.random.shuffle( indices )
       batches = [indices[i:i+self.bsize] for i in range(0, self.size, self.bsize)]
+
+      # reward Annealing
+      frac = 1.0 - (e - 1.0) / self.epoch
+      lrnow = frac * self.lr
+      self.AC.optimizer.param_groups[0]["lr"] = lrnow
 
       for batch in batches:
         states    = torch.tensor(self.states[batch], dtype=torch.float).to('cpu')
@@ -127,6 +132,7 @@ class PPO:
         # take gradient step
         self.AC.optimizer.zero_grad()
         loss.mean().backward()
+        nn.utils.clip_grad_norm_(self.AC.parameters(), 0.5)
         self.AC.optimizer.step()
 
     # clear memory
@@ -141,8 +147,8 @@ output_size = env.action_space.n
 
 
 # Environment Hyperparameters
-max_ep_len = 400                    # max timesteps in one episode
-max_training_timesteps = int(1e5)   # break training loop if timeteps > max_training_timesteps
+max_ep_len = 128                    # max timesteps in one episode
+max_training_timesteps = int(1e4)   # break training loop if timeteps > max_training_timesteps
 update_timestep = max_ep_len * 4    # update policy every n timesteps
 print_freq = max_ep_len * 4         # print avg reward in the interval (in num timesteps)
 
@@ -152,7 +158,7 @@ print_running_episodes = 0
 time_step = 0
 i_episode = 0
 
-agent = PPO(input_size, output_size, size=update_timestep, bsize=1)
+agent = PPO(env.observation_space, env.action_space, batch_size=4, Mem_size=update_timestep)
 
 scores, avg_scores = [], []
 while time_step <= max_training_timesteps:
@@ -160,9 +166,11 @@ while time_step <= max_training_timesteps:
   score = 0
   for t in range(1, max_ep_len+1):
 
+    #env.render()
     action, probs, val = agent.selectAction(state)
-    state, reward, done, _ = env.step(action)
+    _state, reward, done, _ = env.step(action)
     agent.store(state, action, reward, probs, val, done)
+    state = _state
 
     time_step +=1
     score += reward
@@ -171,12 +179,12 @@ while time_step <= max_training_timesteps:
     if time_step % update_timestep == 0: agent.train()
 
     # printing average reward
-    if time_step % print_freq == 0:
+    if time_step % max_ep_len == 0:
       # print average reward till last episode
       print_avg_reward = print_running_reward / print_running_episodes
       print_avg_reward = round(print_avg_reward, 2)
 
-      print("Episode : {}  Timestep : {}  Average Reward : {}".format(i_episode, time_step, print_avg_reward))
+      print("Episode: {} Timestep: {} Reward: {} Avg Reward: {}".format(i_episode, time_step, score, print_avg_reward))
 
       print_running_reward = 0
       print_running_episodes = 0

@@ -64,8 +64,8 @@ class ActorCritic(nn.Module):
     return value
 
 class PPO:  
-  def __init__(self, in_space, out_space, batch_size=5, Mem_size=5, num_envs=1):
-    self.lr    = 0.0003
+  def __init__(self, in_space, out_space, batch_size=4, Mem_size=128, num_envs=4):
+    self.lr    = 2.5e-4   # 0.0003
     self.gamma = 0.99 
     self.lamda = 0.95
     self.epoch = 4
@@ -121,6 +121,11 @@ class PPO:
       np.random.shuffle( indices )
       batches = [indices[i:i+self.bsize] for i in range(0, self.size, self.bsize)]
 
+      # reward Annealing
+      frac = 1.0 - (e - 1.0) / self.epoch
+      lrnow = frac * self.lr
+      self.AC.optimizer.param_groups[0]["lr"] = lrnow
+
       for batch in batches:
         states    = torch.tensor(self.states[batch], dtype=torch.float).to('cpu')
         actions   = torch.tensor(self.actions[batch], dtype=torch.float).to('cpu')
@@ -146,6 +151,7 @@ class PPO:
         # take gradient step
         self.AC.optimizer.zero_grad()
         loss.mean().backward()
+        nn.utils.clip_grad_norm_(self.AC.parameters(), 0.5)
         self.AC.optimizer.step()
 
     self.idx=0 # clear memory
@@ -157,50 +163,54 @@ gym_id = "CartPole-v1"
 seed        = 1
 num_envs    = 4       # number of parallel environments
 
-max_ep_len  = 400   # max time steps per episodes
-total_steps = 50000 # number of time steps to observe  ( n / num of enivoronments )
-update_freq = 128   # update policy every n times teps ( n / num of enivoronments )
-batch_size  = num_envs * update_freq
+# Environment Hyperparameters
+max_ep_len = 128                    # max timesteps in one episode
+max_training_timesteps = int(1e4)   # break training loop if timeteps > max_training_timesteps
+update_timestep = max_ep_len * 4    # update policy every n timesteps
+print_freq = max_ep_len * 4         # print avg reward in the interval (in num timesteps)
 
-#update_freq = max_ep_len * 4    # update policy every n timesteps
-#num_updates = total_steps // batch_size # number of updates we need to do
+print_running_reward   = 0
+print_running_episodes = 0
+
 
 envs = gym.vector.SyncVectorEnv([
       make_env(gym_id, i, seed+i, record=False, run_name=f"{gym_id}__{int(time.time())}" ) 
           for i in range(num_envs)
       ])
 
-agent = PPO(envs.single_observation_space, envs.single_action_space, batch_size, 
-                                                    Mem_size=batch_size, num_envs=num_envs)
-
-timestep  = 0 
+time_step  = 0 
 i_episode = 0
-scores, avg_scores = [], []
 
-obs = envs.reset()
-while timestep <= total_steps:
-  score = 0
+
+agent = PPO(envs.single_observation_space, envs.single_action_space, batch_size=4, 
+                                                    Mem_size=update_timestep, num_envs=num_envs)
+
+scores, avg_scores = [], []
+state = envs.reset()
+while time_step <= max_training_timesteps:
+  state = envs.reset()
   for t in range(1, max_ep_len+1):
 
-    action, log_probs, value = agent.selectAction(obs)
-    _obs, reward, done, info = envs.step(action)
-    agent.store(obs, action, reward, log_probs, value, done)
+    action, probs, val = agent.selectAction(state)
+    _state, reward, done, info = envs.step(action)
+    agent.store(state, action, reward, probs, val, done)
+    state = _state
 
-    obs = _obs
-
-    timestep += 1
-    score += reward
+    time_step += 1
 
     # train PPO agent
-    if timestep % update_freq == 0: 
+    if time_step % update_timestep == 0: 
       agent.train()
 
-      for item in info:
-        if "episode" in item.keys():
-          score = item['episode']['r']
-          scores.append( score  )
-          avg = np.round(np.mean(scores[-100:]), 2)
-          i_episode+=1
-          print(f"Episode: {i_episode}  Episodic return: {score} Avg returns:{avg} Time step: {timestep} ")
-          #print(f"Episode: {i_episode}  Episode stats: {item['episode']}  Time step: {timestep} ")
+    for item in info:
+      if "episode" in item.keys():
+        score = item['episode']['r']
+        scores.append( score  )
+        avg = np.round(np.mean(scores[-100:]), 2)
+        i_episode+=1
+        print(f"Episode: {i_episode}  Episodic return: {score} Avg returns:{avg} Time step: {time_step} ")
+        #print("Episode: {} Timestep: {} Reward: {} Avg Reward: {}".format(i_episode, time_step, score, print_avg_reward))
 
+    #if done.any(): print(done)
+    # break; if the episode is over
+    #if done.any(): break
