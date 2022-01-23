@@ -10,6 +10,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 
+seed = 2
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+
 class ReplayBuffer:
   def __init__(self, size=50000):
     self.memory = collections.deque(maxlen=size)
@@ -21,11 +26,11 @@ class ReplayBuffer:
 
   def sample(self, batch_size):
     batch = random.sample(self.memory, batch_size)
-    states  = torch.tensor([x[0] for x in batch], dtype=torch.float)
-    actions = torch.tensor([x[1] for x in batch], dtype=torch.float)
-    rewards = torch.tensor([x[2] for x in batch], dtype=torch.float)
-    nstates = torch.tensor([x[3] for x in batch], dtype=torch.float)
-    dones   = torch.tensor([1-int(x[4]) for x in batch])
+    states  = torch.tensor([x[0] for x in batch], dtype=torch.float).to('cpu')
+    actions = torch.tensor([x[1] for x in batch], dtype=torch.float).to('cpu')
+    rewards = torch.tensor([x[2] for x in batch], dtype=torch.float).to('cpu')
+    nstates = torch.tensor([x[3] for x in batch], dtype=torch.float).to('cpu')
+    dones   = torch.tensor([1-int(x[4]) for x in batch]).to('cpu')
     #dones   = torch.tensor([int(x[4]) for x in batch])
     return states, actions, rewards, nstates, dones
 
@@ -39,7 +44,7 @@ time_step = 0          # global time step logger
 learning_start = 5e3   # timestep to start learning
 LOG_STD_MAX, LOG_STD_MIN = 2, -5 
 
-""" Implementing a squashed gaussian policy - Denis Yates"""
+""" Implementing a diagonal gaussian policy """
 class Actor(nn.Module):
   def __init__(self, in_space, out_space, lr=0.0005):
     super(Actor, self).__init__()
@@ -60,7 +65,7 @@ class Actor(nn.Module):
     mean = self.fc_mean(x)
     log_std = self.fc_std(x)
     log_std = torch.tanh(log_std)
-    log_std = torch.clamp(log_std, min=LOG_STD_MIN, max=LOG_STD_MAX)
+    log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
     return mean, log_std
 
   def evaluate(self, obs):
@@ -73,8 +78,12 @@ class Actor(nn.Module):
     log_probs = dist.log_prob(x_t)
     log_probs -= torch.log(self.action_scale * (1 - y_t.pow(2)) +  1e-6)
     log_probs = log_probs.sum(1, keepdim=True)
-    mean = torch.tanh(mean) * self.action_scale + self.action_bias
     return action, log_probs
+
+  def to(self, device):
+    self.action_scale = self.action_scale.to(device)
+    self.action_bias = self.action_bias.to(device)
+    return super(Actor, self).to(device)
 
 class Critic(nn.Module):
   def __init__(self, in_space, out_space, lr=0.0005):
@@ -84,6 +93,7 @@ class Critic(nn.Module):
     self.fc3 = nn.Linear(128, 1)
     self.apply(layer_init)
     self.optimizer = optim.Adam(self.parameters(), lr=lr)
+
   def forward(self, s, a):
     x = torch.cat([s,a], dim=1)
     x = F.relu(self.fc1(x)) 
@@ -112,10 +122,12 @@ class SAC:
     self.targ_critic1.load_state_dict(self.critic1.state_dict())
     self.targ_critic2.load_state_dict(self.critic2.state_dict())
 
+    self.value_optimizer = optim.Adam(list(self.critic1.parameters()) 
+                                      + list(self.critic2.parameters()), lr=1e-3)
     self.loss_fn = nn.MSELoss()
 
     # automatic entropy tuning
-    self.target_entropy = - torch.prod(torch.Tensor(env.action_space.shape).to('cpu')).item()
+    self.target_entropy = - torch.prod(torch.Tensor(out_space.shape).to('cpu')).item()
     self.log_alpha = torch.zeros(1, requires_grad=True, device='cpu')
     self.alpha = self.log_alpha.exp().item()
     self.a_optimizer = optim.Adam([self.log_alpha], lr=1e-3)
@@ -126,12 +138,13 @@ class SAC:
   def get_action(self, obs):
     obs = torch.tensor([obs]).float().to('cpu')
     action, _ = self.actor.evaluate(obs)
-    #return action.tolist()[0]
-    return action.cpu().detach().numpy()[0]
+    return action.tolist()[0]
+    #return action.cpu().detach().numpy()[0]
 
   def train(self, batch_size=256):
     if len(self.memory) >= learning_start:
       states, actions, rewards, nstates, dones = self.memory.sample(batch_size)
+
       with torch.no_grad():
         nactions, nlog_probs = self.actor.evaluate(nstates)
         nq1 = self.targ_critic1.forward(nstates, nactions)
@@ -141,8 +154,8 @@ class SAC:
 
       q1 = self.critic1.forward(states, actions).view(-1)
       q2 = self.critic2.forward(states, actions).view(-1)
-      q1_loss = F.mse_loss(q1, q_targ)
-      q2_loss = F.mse_loss(q2, q_targ)
+      q1_loss = self.loss_fn(q1, q_targ)
+      q2_loss = self.loss_fn(q2, q_targ)
 
       self.critic1.optimizer.zero_grad()
       q1_loss.backward()
@@ -151,6 +164,12 @@ class SAC:
       self.critic2.optimizer.zero_grad()
       q2_loss.backward()
       self.critic2.optimizer.step()
+
+      #value_loss = (q2_loss + q2_loss)/2
+      #print( value_loss)
+      #self.value_optimizer.zero_grad()
+      #value_loss.backward()
+      #self.value_optimizer.step()
 
       if time_step % self.delay_step == 0: 
         for _ in range(self.delay_step): 
@@ -166,10 +185,9 @@ class SAC:
           actor_loss.backward()
           self.actor.optimizer.step()
 
+          # auto tune temp
           with torch.no_grad():
             _d, log_probs = self.actor.evaluate(states)
-
-          # auto tune temp
           alpha_loss = ( -self.log_alpha * (log_probs + self.target_entropy)).mean()
           self.a_optimizer.zero_grad()
           alpha_loss.backward()
@@ -186,16 +204,22 @@ class SAC:
     pass
 
 
-env = gym.make('Pendulum-v0')
-#env = gym.make('HopperBulletEnv-v0')
+#env = gym.make('Pendulum-v0')
+env = gym.make('HopperBulletEnv-v0')
 #env = gym.make('InvertedPendulumBulletEnv-v0')
 env = gym.wrappers.RecordEpisodeStatistics(env)
+
+###################################################
+env.seed(seed)
+env.action_space.seed(seed)
+env.observation_space.seed(seed)
+###################################################
 
 agent = SAC( env.observation_space, env.action_space )
 
 #env.render()
 scores = []
-for epi in range(5000):
+for epi in range(2000):
   obs = env.reset()
   while True:
     if time_step < learning_start:
@@ -214,5 +238,4 @@ for epi in range(5000):
       avg_score = np.mean(scores[-10:]) # moving average of last 100 episodes
       print(f"Episode: {epi}, Time step: {time_step}, Return: {scores[-1]}, Avg return: {avg_score}")
       break
-
 env.close()
