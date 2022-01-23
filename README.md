@@ -1,5 +1,8 @@
 # TinyRL
 TinyRL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet )
+<p align="center">
+	<img src="results/logo.png" width="200" /> 
+</p>
 
 ## Usage
 You can train the model by executing the following command:
@@ -8,6 +11,7 @@ python <algorithm name>.py
 ```
  
 Implementation of the algorithms are benchmarked againts Openai gym the cart pole problem.
+
 <p align="center">
 	<img src="results/cartpole.gif" width="200" /> 
 </p>
