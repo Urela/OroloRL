@@ -1,5 +1,5 @@
-# Green House 
-This is repository where I dump my implementation of various **reinforcement learing algortihms**. Each implementaiton is rewritten using **pytorch** and exists in one file <algorithm name>.py . These are ment to be toy examples, are primarily for learning and expirmentation.
+# TinyRL
+TinyRL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet )
 
 ## Usage
 You can train the model by executing the following command:
