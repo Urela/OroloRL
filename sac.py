@@ -128,8 +128,7 @@ class SAC:
   def get_action(self, obs):
     obs = torch.tensor([obs]).float().to('cpu')
     action, _ = self.actor.evaluate(obs)
-    return action.tolist()[0]
-    #return action.cpu().detach().numpy()[0]
+    return action.cpu().detach().numpy()[0]
 
   def train(self, batch_size=256):
     if len(self.memory) >= learning_start:
