@@ -10,7 +10,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 
-
 class ReplayBuffer:
   def __init__(self, size=50000):
     self.memory = collections.deque(maxlen=size)
@@ -27,7 +26,6 @@ class ReplayBuffer:
     rewards = torch.tensor([x[2] for x in batch], dtype=torch.float).to('cpu')
     nstates = torch.tensor([x[3] for x in batch], dtype=torch.float).to('cpu')
     dones   = torch.tensor([1-int(x[4]) for x in batch]).to('cpu')
-    #dones   = torch.tensor([int(x[4]) for x in batch])
     return states, actions, rewards, nstates, dones
 
 # Initialize Policy weights
@@ -101,7 +99,6 @@ class SAC:
   def __init__(self, in_space, out_space):
 
     self.tau    = 0.005 # for target network soft update
-    #self.alpha  = 0.2   # initial entropy 
     self.gamma  = 0.90  # discount
     self.memory = ReplayBuffer(size=1000000)
 
@@ -117,8 +114,6 @@ class SAC:
     self.targ_critic1.load_state_dict(self.critic1.state_dict())
     self.targ_critic2.load_state_dict(self.critic2.state_dict())
 
-    self.value_optimizer = optim.Adam(list(self.critic1.parameters()) 
-                                      + list(self.critic2.parameters()), lr=1e-3)
     self.loss_fn = nn.MSELoss()
 
     # automatic entropy tuning
@@ -146,7 +141,6 @@ class SAC:
         nq2 = self.targ_critic2.forward(nstates, nactions)
         q_targ = torch.min(nq1 , nq2) - self.alpha * nlog_probs
         q_targ = rewards + self.gamma * q_targ.view(-1) * dones
-        #q_targ = rewards + (1-dones) * self.gamma* q_targ.view(-1) 
 
       q1 = self.critic1.forward(states, actions).view(-1)
       q2 = self.critic2.forward(states, actions).view(-1)
@@ -160,13 +154,6 @@ class SAC:
       self.critic2.optimizer.zero_grad()
       q2_loss.backward()
       self.critic2.optimizer.step()
-
-      #print(q1_loss , q2_loss) 
-      #value_loss = (q2_loss + q2_loss)/2
-      ##print( value_loss)
-      #self.value_optimizer.zero_grad()
-      #value_loss.backward()
-      #self.value_optimizer.step()
 
       if time_step % self.delay_step == 0: 
         for _ in range(self.delay_step): 
@@ -198,22 +185,12 @@ class SAC:
 
         for target_param, param in zip(self.targ_critic2.parameters(), self.critic2.parameters()):
           target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-      # update the target network
-      #if time_step % self.target_update == 0: # TD 3 Delayed update support
-      #  for param, target_param in zip(self.critic1.parameters(), self.targ_critic1.parameters()):
-      #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-      #  for param, target_param in zip(self.critic2.parameters(), self.targ_critic2.parameters()):
-      #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
     pass
 
-
 #env = gym.make('Pendulum-v0')
-env = gym.make('HopperBulletEnv-v0')
 #env = gym.make('InvertedPendulumBulletEnv-v0')
+env = gym.make('HopperBulletEnv-v0')
 env = gym.wrappers.RecordEpisodeStatistics(env)
-
 
 agent = SAC( env.observation_space, env.action_space )
 
