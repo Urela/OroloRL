@@ -20,12 +20,11 @@ class ReplayBuffer:
 
   def sample(self, batch_size):
     batch = random.sample(self.memory, batch_size)
-    batch = random.sample(self.memory, batch_size)
     states  = torch.tensor([x[0] for x in batch], dtype=torch.float)
     actions = torch.tensor([x[1] for x in batch])
     rewards = torch.tensor([[x[2]] for x in batch]).float()
     nstates = torch.tensor([x[3] for x in batch], dtype=torch.float)
-    dones   = torch.tensor([x[4] for x in batch])
+    dones   = torch.tensor([int(x[4]) for x in batch])
     return states, actions, rewards, nstates, dones
 
 class Actor(nn.Module):
@@ -103,7 +102,7 @@ class SAC:
     self.memory.store((exp))
 
   def get_action(self, obs):
-    obs = torch.tensor([obs]).float()
+    obs = torch.tensor(obs).float()
     action, log_prob = self.actor(obs)
     return action.detach().numpy(), log_prob 
 
@@ -125,7 +124,7 @@ class SAC:
 
       self.value.optimizer.zero_grad()
       target = critic - log_probs
-      loss = 0.5 * F.mse_loss(value, nvalue)
+      loss = 0.5 * F.mse_loss(value, target)
       loss.backward(retain_graph=True)
       self.value.optimizer.step()
 
@@ -146,7 +145,7 @@ class SAC:
       self.critic1.optimizer.zero_grad()
       self.critic2.optimizer.zero_grad()
 
-      print( states.shape, actions.shape)
+      #print( states.shape, actions.shape)
       q_hat = self.scale*rewards + self.gamma*nvalue
       q1 = self.critic1.forward(states, actions).view(-1)
       q2 = self.critic2.forward(states, actions).view(-1)
