@@ -10,10 +10,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
 
-seed = 2
-random.seed(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
 
 class ReplayBuffer:
   def __init__(self, size=50000):
@@ -110,7 +106,6 @@ class SAC:
     self.memory = ReplayBuffer(size=1000000)
 
     self.delay_step    = 1   # Denis Yarats' implementation delays this by 2.
-    self.update_step   = 0
     self.target_update = 1
 
     self.actor = Actor(in_space, out_space, lr=3e-4).to('cpu')
@@ -150,12 +145,13 @@ class SAC:
         nq1 = self.targ_critic1.forward(nstates, nactions)
         nq2 = self.targ_critic2.forward(nstates, nactions)
         q_targ = torch.min(nq1 , nq2) - self.alpha * nlog_probs
-        q_targ = rewards - self.gamma * q_targ.view(-1) * dones
+        q_targ = rewards + self.gamma * q_targ.view(-1) * dones
+        #q_targ = rewards + (1-dones) * self.gamma* q_targ.view(-1) 
 
       q1 = self.critic1.forward(states, actions).view(-1)
       q2 = self.critic2.forward(states, actions).view(-1)
-      q1_loss = self.loss_fn(q1, q_targ)
       q2_loss = self.loss_fn(q2, q_targ)
+      q1_loss = self.loss_fn(q1, q_targ)
 
       self.critic1.optimizer.zero_grad()
       q1_loss.backward()
@@ -165,8 +161,9 @@ class SAC:
       q2_loss.backward()
       self.critic2.optimizer.step()
 
+      #print(q1_loss , q2_loss) 
       #value_loss = (q2_loss + q2_loss)/2
-      #print( value_loss)
+      ##print( value_loss)
       #self.value_optimizer.zero_grad()
       #value_loss.backward()
       #self.value_optimizer.step()
@@ -201,6 +198,14 @@ class SAC:
 
         for target_param, param in zip(self.targ_critic2.parameters(), self.critic2.parameters()):
           target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+      # update the target network
+      #if time_step % self.target_update == 0: # TD 3 Delayed update support
+      #  for param, target_param in zip(self.critic1.parameters(), self.targ_critic1.parameters()):
+      #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+      #  for param, target_param in zip(self.critic2.parameters(), self.targ_critic2.parameters()):
+      #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
     pass
 
 
@@ -209,11 +214,6 @@ env = gym.make('HopperBulletEnv-v0')
 #env = gym.make('InvertedPendulumBulletEnv-v0')
 env = gym.wrappers.RecordEpisodeStatistics(env)
 
-###################################################
-env.seed(seed)
-env.action_space.seed(seed)
-env.observation_space.seed(seed)
-###################################################
 
 agent = SAC( env.observation_space, env.action_space )
 
@@ -235,7 +235,9 @@ for epi in range(2000):
     time_step+=1
     if "episode" in info.keys():
       scores.append(int(info['episode']['r']))
-      avg_score = np.mean(scores[-10:]) # moving average of last 100 episodes
-      print(f"Episode: {epi}, Time step: {time_step}, Return: {scores[-1]}, Avg return: {avg_score}")
+      avg_score = np.mean(scores[-100:]) # moving average of last 100 episodes
+      #print(f"Episode: {epi}, Time step: {time_step}, Return: {scores[-1]}, Avg return: {avg_score}")
+      if epi % 10 ==0:
+        print(f"global_step={time_step}, episode_reward={int(info['episode']['r'])}")
       break
 env.close()
