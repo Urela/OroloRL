@@ -49,3 +49,9 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
 ## Reference 
 - [Youtube-Code-Repository](https://github.com/philtabor/Youtube-Code-Repository)
 - [minimalRL-pytorch] (https://github.com/seungeunrho/minimalRL)
+
+
+## References
+<a id="1">[1]</a> Youtube-Code-Repository https://github.com/philtabor/Youtube-Code-Repository
+<a id="2">[2]</a> minimalRL-pytorch https://github.com/seungeunrho/minimalRL
+<a id="3">[3]</a> CleanRL (Clean Implementation of RL Algorithms) https://github.com/vwxyzjn/cleanrl
