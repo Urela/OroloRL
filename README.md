@@ -6,13 +6,13 @@ You can train the model by executing the following command:
 ```bash
 python <algorithm name>.py 
 ```
- 
+<!---
 Implementation of the algorithms are benchmarked againts Openai gym the cart pole problem.
 
 <p align="center">
 	<img src="results/cartpole.gif" width="200" /> 
 </p>
-<!---
+
 ## Parameters
 Parameters are not 'optimized', I just picked some off-the-shelf-parameters
 - activation: ReLu
@@ -29,7 +29,7 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
   - epoch = 4
   - clip = 0.2
 ## Results
---->
+
 <table align="center">
   <tr>
     <td> <img src="results/DQN.png" width="250"/> </td>
@@ -40,7 +40,7 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
       <td> PPO: Proximal policy optimization </td>
   </tr>
 </table>
-
+--->
 
 ## Dependencies
 - PyTorch
