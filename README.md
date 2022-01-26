@@ -1,5 +1,12 @@
 # TinyRL  
-TinyRL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet )
+TinyRL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet, atari,... )
+- Currently the algorithms are design to run on a cpu ( as I don't have a GPU yet) but a quick crtl+shift+f 'cpu' to device should fix fix that. Where:
+
+```python
+device = T.device('cuda:0' if T.cuda.is_available() else 'cpu') 
+```
+
+<!---
 
 ## Usage
 You can train the model by executing the following command:
@@ -45,11 +52,6 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
 ## Dependencies
 - PyTorch
 - OpenAI GYM
-
-## Reference 
-- [Youtube-Code-Repository](https://github.com/philtabor/Youtube-Code-Repository)
-- [minimalRL-pytorch] (https://github.com/seungeunrho/minimalRL)
-
 
 ## References
 - <a id="1">[1]</a> Youtube-Code-Repository https://github.com/philtabor/Youtube-Code-Repository
