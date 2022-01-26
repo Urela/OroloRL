@@ -78,7 +78,6 @@ class PPO:
     self.dones   [idx] = 1-(done)
 
   def get_action(self, obs):
-    obs   = torch.from_numpy(obs).float().to('cpu')
     value = self.AC.critic(obs)
     mean  = self.AC.actor(obs)
     log_std = self.AC.actor_logstd.expand_as(mean)
@@ -93,10 +92,63 @@ class PPO:
     return action, probs, value
 
   def train(self):
+    for epi in range( self.epoch):
+      # finding Advantages using gamma returns
+      nvalues = np.concatenate([self.values[1:] ,[self.values[-1]]])
+      delta = self.rewards + self.gamma*nvalues* self.dones - self.values
+      advantage, adv = [], 0
+      for d in delta[::-1]:
+        adv = self.gamma * self.lamda * adv + d
+        advantage.append(adv)
+      advantage.reverse()
+
+      advantage = torch.tensor(advantage).to('cpu').reshape(-1)
+      values    = torch.tensor(self.values.reshape(-1)).to('cpu')
+      
+      # create mini batches
+      indices = np.arange( self.size, dtype=np.int64 )
+      np.random.shuffle( indices )
+      batches = [indices[i:i+self.bsize] for i in range(0, self.size, self.bsize)]
+
+      # reward Annealing
+      frac = 1.0 - (epi - 1.0) / self.epoch
+      lrnow = frac * self.lr
+      self.AC.optimizer.param_groups[0]["lr"] = lrnow
+
+      for batch in batches:
+        states    = torch.tensor(self.states[batch], dtype=torch.float).to('cpu')
+        actions   = torch.tensor(self.actions[batch], dtype=torch.float).to('cpu')
+        old_probs = torch.tensor(self.probs[batch], dtype=torch.float).to('cpu')
+
+        # Evaluating old actions and values
+
+        action, new_probs, crit = self.get_action(states)
+        new_probs = torch.tensor( new_probs ).to('cpu')
+        print( new_probs.shape, old_probs.shape)
+        # Finding the ratio (pi_theta / pi_theta__old)
+        #new_probs = dist.log_prob(actions)
+        ratio = new_probs.exp() / old_probs.exp()
+
+        # Finding Surrogate Loss
+        surr1 = ratio * advantage[batch]
+        surr2 = torch.clamp(ratio, 1-self.eps_clip, 1+self.eps_clip) * advantage[batch]
+        returns = advantage[batch] + values[batch]
+
+        # final loss of clipped objective PPO: loss = actor_loss + 0.5*critic_loss 
+        loss = -torch.min(surr1, surr2).mean() + 0.5*((returns-crit)**2).mean()
+
+        # take gradient step
+        self.AC.optimizer.zero_grad()
+        loss.mean().backward()
+        nn.utils.clip_grad_norm_(self.AC.parameters(), 0.5)
+        self.AC.optimizer.step()
+
+
     self.idx=0
     pass
 
 time_step = 0
+update_frequency = 128
 num_envs  = 4       # number of parallel environments
 env = gym.vector.SyncVectorEnv(
     [lambda: gym.make('HopperBulletEnv-v0') for _ in range(num_envs) ]
@@ -105,7 +157,7 @@ env = gym.wrappers.RecordEpisodeStatistics(env)
 
 #agent = PPO( env.observation_space, env.action_space )
 #agent = PPO(env.single_observation_space, env.single_action_space, )
-agent = PPO(env.single_observation_space, env.single_action_space, batch_size=4, num_steps=128, num_envs=num_envs)
+agent = PPO(env.single_observation_space, env.single_action_space, batch_size=4, num_steps=update_frequency, num_envs=num_envs)
 
 #env.render(mode='human')
 #env.render() scores = []
@@ -113,13 +165,15 @@ scores = []
 for epi in range(1000):
   obs = env.reset()
   while True:
-    action, probs, vals = agent.get_action(obs)
+
+    action, probs, vals = agent.get_action( torch.from_numpy(obs).float().to('cpu') )
     #action, probs, vals = env.action_space.sample(), 0 ,0
     _obs, reward, done, info = env.step(action)
     agent.store(obs, action, reward, probs, vals, done)
 
     time_step+=1
-    #agent.train()
+    if time_step % update_frequency ==0:
+      agent.train()
 
     obs = _obs
     for item in info:
