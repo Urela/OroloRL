@@ -12,7 +12,7 @@ Implementation of the algorithms are benchmarked againts Openai gym the cart pol
 <p align="center">
 	<img src="results/cartpole.gif" width="200" /> 
 </p>
-	
+<!---
 ## Parameters
 Parameters are not 'optimized', I just picked some off-the-shelf-parameters
 - activation: ReLu
@@ -29,7 +29,7 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
   - epoch = 4
   - clip = 0.2
 ## Results
-
+--->
 <table align="center">
   <tr>
     <td> <img src="results/DQN.png" width="250"/> </td>
@@ -52,6 +52,6 @@ Parameters are not 'optimized', I just picked some off-the-shelf-parameters
 
 
 ## References
-<a id="1">[1]</a> Youtube-Code-Repository https://github.com/philtabor/Youtube-Code-Repository
-<a id="2">[2]</a> minimalRL-pytorch https://github.com/seungeunrho/minimalRL
-<a id="3">[3]</a> CleanRL (Clean Implementation of RL Algorithms) https://github.com/vwxyzjn/cleanrl
+- <a id="1">[1]</a> Youtube-Code-Repository https://github.com/philtabor/Youtube-Code-Repository
+- <a id="2">[2]</a> minimalRL-pytorch https://github.com/seungeunrho/minimalRL
+- <a id="3">[3]</a> CleanRL (Clean Implementation of RL Algorithms) https://github.com/vwxyzjn/cleanrl
