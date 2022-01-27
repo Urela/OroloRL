@@ -188,11 +188,3 @@ while time_step <= max_training_timesteps:
   i_episode += 1
 
 env.close()
-
-
-  
-from bokeh.plotting import figure, show
-p = figure(title="(BipedalWalkerHardcore-v3) Running average of past 100 games", x_axis_label="iterations", y_axis_label="Scores")
-x = np.arange(len(avg_scores))
-p.line(x, avg_scores,  legend_label="scores", line_color="blue", line_width=2)
-show(p) 
