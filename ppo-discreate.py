@@ -5,36 +5,41 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 
-class ActorNet(nn.Module):
-  def __init__(self, in_dims, out_dims, lr):
-    super(ActorNet, self).__init__()
-    self.actor = nn.Sequential(
-      nn.Linear(in_dims, 64), nn.ReLU(),
-      nn.Linear(64, 64),     nn.ReLU(),
-      nn.Linear(64, out_dims),
-      nn.Softmax(dim=-1)
-    )    
-    self.optimizer = optim.Adam(self.parameters(), lr=lr)
-    self.to('cpu')
+class ActorCritic(nn.Module):
+  def layer_init(self, layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
-  def forward(self, state):
-    dist = self.actor(state)
+  def __init__(self, in_dims, out_dims, lr=2.5e-4):
+    super(ActorCritic, self).__init__()
+
+    self.fc_actor = nn.Sequential(
+      self.layer_init(nn.Linear(np.array(in_dims).prod(), 64)),
+      nn.Tanh(),
+      self.layer_init(nn.Linear(64, 64)),
+      nn.Tanh(),
+      self.layer_init(nn.Linear(64, out_dims), std=0.01),
+      nn.Softmax(dim=-1)
+    )
+
+    self.fc_critic = nn.Sequential(
+      self.layer_init(nn.Linear(np.array(in_dims).prod(), 64)),
+      nn.Tanh(),
+      self.layer_init(nn.Linear(64, 64)),
+      nn.Tanh(),
+      self.layer_init(nn.Linear(64, 1), std=1.0),
+    )
+
+    self.optimizer = optim.Adam(self.parameters(), lr=lr, eps=1e-5)
+
+  def actor(self, state):
+    dist = self.fc_actor(state)
     dist = Categorical(dist)
     return dist
 
-class CriticNet(nn.Module):
-  def __init__(self, in_dims, lr):
-    super(CriticNet, self).__init__()
-    self.critic = nn.Sequential(
-      nn.Linear(in_dims, 64), nn.ReLU(),
-      nn.Linear(64, 64),     nn.ReLU(),
-      nn.Linear(64, 1),
-    )    
-    self.optimizer = optim.Adam(self.parameters(), lr=lr)
-    self.to('cpu')
-
-  def forward(self, state):
-    value = self.critic(state)
+  def critic(self, state):
+    value = self.fc_critic(state)
     return value
 
 class PPO: 
@@ -45,8 +50,7 @@ class PPO:
     self.epoch = 4
     self.eps_clip = 0.2
 
-    self.actor  = ActorNet( in_dims, out_dims, self.lr)
-    self.critic = CriticNet(in_dims, self.lr)
+    self.AC = ActorCritic(in_dims, out_dims, self.lr)
 
     self.states  = np.zeros((size, in_dims), dtype=np.float32)
     self.actions = np.zeros(size, dtype=np.int32)
@@ -66,11 +70,10 @@ class PPO:
     self.values  [idx] = vals
     self.dones   [idx] = 1-int(done)
 
-  def selectAction(self, obs):
-    #obs  = torch.tensor([obs], dtype=torch.float).to('cpu')
-    obs    = torch.from_numpy(obs)
-    value  = self.critic(obs)
-    dist   = self.actor(obs)
+  def get_action(self, obs):
+    obs  = torch.tensor([obs], dtype=torch.float).to('cpu')
+    value  = self.AC.critic(obs)
+    dist   = self.AC.actor(obs)
     action = dist.sample()
 
     probs  = torch.squeeze(dist.log_prob(action)).item()
@@ -104,8 +107,8 @@ class PPO:
         actions = torch.tensor(self.actions[batch], dtype=torch.float).to('cpu')
         old_probs = torch.tensor(self.probs[batch], dtype=torch.float).to('cpu')
 
-        dist = self.actor(states)
-        crit = self.critic(states)
+        dist = self.AC.actor(states)
+        crit = self.AC.critic(states)
         crit = torch.squeeze(crit)
 
         new_probs = dist.log_prob(actions)
@@ -113,18 +116,14 @@ class PPO:
 
         surr1 = ratio * advantage[batch]
         surr2 = torch.clamp(ratio, 1-self.eps_clip, 1+self.eps_clip) * advantage[batch]
-        actor_loss = -torch.min(surr1, surr2).mean() 
-
         returns = advantage[batch] + values[batch]
-        critic_loss = (returns-crit)**2
-        critic_loss = critic_loss.mean()
 
-        total_loss = actor_loss + 0.5*critic_loss
-        self.actor.optimizer.zero_grad()
-        self.critic.optimizer.zero_grad()
-        total_loss.backward()
-        self.actor.optimizer.step()
-        self.critic.optimizer.step()
+        # final loss of clipped objective PPO: loss = actor_loss + 0.5*critic_loss 
+        loss = -torch.min(surr1, surr2).mean() + 0.5*((returns-crit)**2).mean()
+
+        self.AC.optimizer.zero_grad()
+        loss.backward()
+        self.AC.optimizer.step()
 
     self.idx=0
     pass
@@ -156,7 +155,7 @@ while time_step <= max_training_timesteps:
   for t in range(1, max_ep_len+1):
 
     #print( t)
-    action, probs, val = agent.selectAction(state)
+    action, probs, val = agent.get_action(state)
     state, reward, done, _ = env.step(action)
     agent.store(state, action, reward, probs, val, done)
 
@@ -188,3 +187,5 @@ while time_step <= max_training_timesteps:
   i_episode += 1
 
 env.close()
+
+
