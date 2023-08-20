@@ -1,5 +1,5 @@
-# TinyRL  
-TinyRL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet, atari,... )
+# Orolo-RL  
+Orolo-RL is a collection of various deep reinforcement learning algorithms. Each alogorthim is implented in single file using pytorch and tested on OpenAI's gym library ( pybullet, atari,... )
 - Currently the algorithms are design to run on a cpu ( as I don't have a GPU yet) but a quick crtl+shift+f 'cpu' to device should fix fix that. Where:
 
 ```python
